@@ -1,20 +1,101 @@
 {
+  "$schema": "./schema/book-platform.contract.v1.schema.json",
   "schema_version": "book-platform.contract.v1",
   "platform_id": "ai",
   "repository": "book-ai-platform",
   "status": "scaffolded",
   "api_version": "v1",
   "data_owner": "book-ai-platform",
-  "capabilities": ["platform-api", "health", "contract"],
-  "depends_on": [],
+  "capabilities": [
+    "llm-gateway",
+    "model-routing",
+    "budget",
+    "prompt-policy",
+    "rag"
+  ],
+  "depends_on": [
+    "identity",
+    "data",
+    "security",
+    "observability"
+  ],
   "current_implementation": {
     "repository": "solo-empire",
-    "source_path": "infra/api/ai_gateway.ts"
+    "source_path": "infra/api/ai_gateway.ts",
+    "source_paths": [
+      "infra/api/ai_gateway.ts",
+      "infra/api/ai_budget.ts"
+    ],
+    "source_status": "current-implementation-in-solo-empire"
   },
   "migration": {
     "compatibility_adapter": "required",
     "shadow_parity": "pending",
     "cutover": "pending",
     "rollback": "required"
-  }
+  },
+  "migration_gates": [
+    "provider-neutral parity",
+    "redaction",
+    "budget enforcement",
+    "rollback adapter"
+  ],
+  "surface_doc": "docs/CONTRACT-SURFACE.md",
+  "interfaces": [
+    {
+      "id": "ai.http.status",
+      "kind": "http",
+      "direction": "provides",
+      "name": "GET /api/ai/status",
+      "status": "current-in-solo-empire",
+      "source": "infra/api/server.ts",
+      "contract": "solo-empire.ai-gateway.v1",
+      "auth": "Bearer token with scope api:read"
+    },
+    {
+      "id": "ai.http.generate",
+      "kind": "http",
+      "direction": "provides",
+      "name": "POST /api/ai/generate",
+      "status": "current-in-solo-empire",
+      "source": "infra/api/server.ts",
+      "contract": "solo-empire.ai-gateway.v1",
+      "auth": "Bearer token with scope ai:generate"
+    },
+    {
+      "id": "ai.budget.status",
+      "kind": "table",
+      "direction": "provides",
+      "name": "Monthly LLM budget status (embedded in GET /api/ai/status)",
+      "status": "current-in-solo-empire",
+      "source": "infra/api/ai_budget.ts",
+      "contract": "solo-empire.llm-lab-budget.v1"
+    },
+    {
+      "id": "ai.event.run-telemetry",
+      "kind": "event",
+      "direction": "provides",
+      "name": "AI run telemetry row (ai_run_telemetry, upsert on run_id)",
+      "status": "current-in-solo-empire",
+      "source": "infra/api/ai_gateway.ts",
+      "contract": "solo-empire.ai-telemetry.v1"
+    },
+    {
+      "id": "ai.consumes.openai-compatible-provider",
+      "kind": "http",
+      "direction": "consumes",
+      "name": "OpenAI-compatible chat completion provider (HTTPS only, no URL credentials)",
+      "status": "current-in-solo-empire",
+      "source": "infra/api/ai_gateway.ts"
+    },
+    {
+      "id": "ai.consumes.identity-bearer",
+      "kind": "http",
+      "direction": "consumes",
+      "name": "Identity bearer-token check (`requireAuth`, scope `ai:generate`)",
+      "status": "current-in-solo-empire",
+      "source": "infra/api/auth.ts",
+      "auth": "Bearer token with scope ai:generate"
+    }
+  ]
 }
