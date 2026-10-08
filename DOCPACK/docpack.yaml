@@ -1,0 +1,8 @@
+system_id: bookchaowalit-backend/book-backend/book-ai-platform
+prefix: CARD
+brand: "BOOK AI PLATFORM"
+subtitle: "ขอบเขต contract ของ platform `ai` ยังไม่มี runtime"
+footer: "Book AI Platform — Product Card"
+color: "#2f4b6e"
+audience: internal
+tier: L0
