@@ -20,13 +20,12 @@
     "observability"
   ],
   "current_implementation": {
-    "repository": "solo-empire",
-    "source_path": "infra/api/ai_gateway.ts",
+    "repository": "solo-ai-gateway",
+    "source_path": "bookchaowalit/solo-ai-gateway",
     "source_paths": [
-      "infra/api/ai_gateway.ts",
-      "infra/api/ai_budget.ts"
+      "bookchaowalit/solo-ai-gateway"
     ],
-    "source_status": "current-implementation-in-solo-empire"
+    "source_status": "adjacent-domain-repository"
   },
   "migration": {
     "compatibility_adapter": "required",
