@@ -20,10 +20,10 @@
     "observability"
   ],
   "current_implementation": {
-    "repository": "solo-ai-gateway",
-    "source_path": "bookchaowalit/solo-ai-gateway",
+    "repository": "ai-gateway",
+    "source_path": "bookchaowalit/ai-gateway",
     "source_paths": [
-      "bookchaowalit/solo-ai-gateway"
+      "bookchaowalit/ai-gateway"
     ],
     "source_status": "adjacent-domain-repository"
   },
