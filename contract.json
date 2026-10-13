@@ -21,9 +21,9 @@
   ],
   "current_implementation": {
     "repository": "ai-gateway",
-    "source_path": "bookchaowalit/ai-gateway",
+    "source_path": "bookchaowalit/platform-ai-gateway-api",
     "source_paths": [
-      "bookchaowalit/ai-gateway"
+      "bookchaowalit/platform-ai-gateway-api"
     ],
     "source_status": "adjacent-domain-repository"
   },
