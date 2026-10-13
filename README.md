@@ -1,4 +1,4 @@
-# book-ai-platform
+# platform-ai
 
 `AI` platform boundary for the Book Platform portfolio.
 
@@ -12,8 +12,8 @@ provider integration, database writer, credential, or customer payload.
 ## Boundary
 
 - Owner: `bookchaowalit-backend`
-- Repository: `book-ai-platform`
-- Target remote: `https://github.com/bookchaowalit-backend/book-ai-platform.git` (published; runtime not activated)
+- Repository: `platform-ai`
+- Target remote: `https://github.com/bookchaowalit-backend/platform-ai.git` (published; runtime not activated)
 - Contract: `book-platform.contract.v1`
 - Status: `scaffolded`
 - Data owner: the platform boundary identified in `contract.json`
