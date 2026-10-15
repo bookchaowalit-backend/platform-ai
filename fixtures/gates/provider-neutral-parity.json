@@ -1,0 +1,283 @@
+{
+  "fixture_version": "platform-ai.provider-neutral-parity.v1",
+  "issue": "BOO-145",
+  "system_id": "ai",
+  "next_gate": "Capture provider-neutral routing, budget, redaction, and evaluation parity before any hosted cutover.",
+  "decision_state": "owner-decision-proposed-not-accepted",
+  "synthetic_only": true,
+  "contract": {
+    "repository": "bookchaowalit/architecture-docs",
+    "commit": "9471af55723434fd34c746ad66fa1d4f5ebf6578",
+    "path": "systems/ai-data/central-ai-gateway.md",
+    "sections": [
+      "#service-lanes",
+      "#contract",
+      "#provider-boundary",
+      "#monthly-budget-guard",
+      "#hosted-service",
+      "#observability-and-rollout"
+    ]
+  },
+  "sources": {
+    "gateway": {
+      "repository": "bookchaowalit/platform-ai-gateway-api",
+      "commit": "723d752d47509939aa6124728be84e63f07167ef",
+      "files": {
+        "api/ai_gateway.ts": "49493429bc75b47b9d949206beefb4ac1f6e404c2562186c07edbd94df8a3eab",
+        "api/ai_budget.ts": "ff2160b1678fe1276e8ca1826633115b6dad48fbb0e63d4101c1f7389f388dd3",
+        "api/ai-gateway-service/service.ts": "6a57b4a7b37b0be5c61f8f80c2f7fcfaf3c7fcfee0391994e9b034672d0d60f9",
+        "database/migrations/025_ai_run_telemetry.sql": "0b526a5ade32b4add67f8fe65e83dbb2f4900f519850c42a703eeb6036bd1243"
+      }
+    },
+    "agent_routing": {
+      "repository": "bookchaowalit/solo-empire",
+      "commit": "63efeeb07a50171af934336bec4a05295f494732",
+      "files": {
+        "infra/scripts/agent/model_routing.py": "47cc3659ffdc8fd7076d40dfa27ac7af8995f3ec5ea7df1e9db7e8535870f855",
+        "infra/scripts/agent/context_pack.py": "be5b84d636f3ed6560cb68a0e5cfe691f0685936f136fe292b95a114de7e6d48"
+      }
+    },
+    "evaluation_plan": {
+      "repository": "bookchaowalit/architecture-docs",
+      "commit": "9471af55723434fd34c746ad66fa1d4f5ebf6578",
+      "files": {
+        "systems/ai-data/central-ai-gateway.md": "ffba736757545d6d18c17b5d5138a0472b2a1509d536ee87a21e8fe741a17407",
+        "systems/ai-data/ai-api-evaluation-plan.md": "671492ed86974d1b95978062d1539c2bd5ca6f73f39497a4d83c8599f0208eb5"
+      }
+    }
+  },
+  "routing": {
+    "policy_version": "solo-empire.model-routing.v1",
+    "source": "infra/scripts/agent/model_routing.py:33-130",
+    "privacy_classes": ["public", "internal", "private", "restricted"],
+    "hosted_blocked_privacy_classes": ["private", "restricted"],
+    "operations": ["inspect", "operate", "change", "plan"],
+    "service_lanes": ["api", "local", "runpod", "subscription"],
+    "profiles": {
+      "fast": {"provider_slot": "configured", "model_slot": "fast-slot", "capability": "triage", "max_output_tokens": 1000, "target_latency_ms": 1000, "cost_class": "low", "adapter": "external", "service_lane": "api"},
+      "balanced": {"provider_slot": "configured", "model_slot": "balanced-slot", "capability": "general", "max_output_tokens": 3000, "target_latency_ms": 3000, "cost_class": "medium", "adapter": "external", "service_lane": "api"},
+      "quality": {"provider_slot": "configured", "model_slot": "quality-slot", "capability": "reasoning", "max_output_tokens": 6000, "target_latency_ms": 7000, "cost_class": "high", "adapter": "external", "service_lane": "api"},
+      "local_reference": {"provider_slot": "local", "model_slot": "solo-empire-local-reference", "capability": "deterministic-reference", "max_output_tokens": 1200, "target_latency_ms": 100, "cost_class": "zero", "adapter": "local", "service_lane": "local"},
+      "subscription": {"provider_slot": "human", "model_slot": "gpt-5.6-luna-subscription", "capability": "interactive", "max_output_tokens": 4096, "target_latency_ms": 1500, "cost_class": "fixed", "adapter": "subscription", "service_lane": "subscription"},
+      "gpu_worker": {"provider_slot": "runpod", "model_slot": "ai-worker", "capability": "batch-multimodal", "max_output_tokens": 4096, "target_latency_ms": 10000, "cost_class": "variable", "adapter": "runpod", "service_lane": "runpod"}
+    },
+    "workloads": ["agent", "interactive", "coding", "reasoning", "batch", "multimodal", "embedding", "speech", "vision", "tts", "reranking", "detection", "segmentation", "music", "image_generation", "video_generation"],
+    "workload_lane_rules": {
+      "interactive": "subscription",
+      "gpu_worker_workloads": ["batch", "multimodal", "embedding", "speech", "vision", "tts", "reranking", "detection", "segmentation", "music", "image_generation", "video_generation"],
+      "text_workloads": ["agent", "coding", "reasoning"]
+    },
+    "specialized_workload_aliases": {
+      "speech": "stt",
+      "embedding": "embeddings",
+      "multimodal": "image",
+      "vision": "image",
+      "tts": "tts",
+      "reranking": "reranking",
+      "detection": "detection",
+      "segmentation": "segmentation",
+      "music": "music",
+      "image_generation": "image",
+      "video_generation": "video"
+    },
+    "text_profile_rules": [
+      {"order": 1, "when": "explicit quality argument", "profile": "<quality>"},
+      {"order": 2, "when": "task contains a quality term or token_budget > quality_token_threshold", "profile": "quality"},
+      {"order": 3, "when": "latency_target_ms <= fast_latency_threshold_ms", "profile": "fast"},
+      {"order": 4, "when": "operation in fast_operations or route in fast_routes", "profile": "fast"},
+      {"order": 5, "when": "otherwise", "profile": "balanced"}
+    ],
+    "quality_terms": ["accuracy", "quality", "reasoning", "deep", "คุณภาพ", "แม่น", "วิเคราะห์ลึก"],
+    "quality_token_threshold": 6000,
+    "fast_latency_threshold_ms": 1000,
+    "fast_operations": ["inspect"],
+    "fast_routes": ["documentation", "health"],
+    "default_token_budget": {"inspect": 3500, "other": 6000},
+    "fallback_order": {
+      "explicit_lanes": ["subscription", "gpu_worker"],
+      "explicit_lane_chain": ["<requested>", "local_reference"],
+      "text_chain": ["<requested>", "balanced", "fast", "local_reference"]
+    },
+    "selection_reasons": [
+      "requested_profile_available",
+      "fallback_to_available_adapter",
+      "requested_service_lane_unavailable_fallback_to_local",
+      "local_reference_is_only_configured_adapter"
+    ],
+    "credentials_required_adapters": ["external", "runpod"],
+    "raw_prompt_persistence": "forbidden",
+    "gateway": {
+      "source": "api/ai_gateway.ts:15-21,162-170,199-227,274-340,421-427",
+      "adapter": "openai-compatible",
+      "provider_env": "AI_GATEWAY_PROVIDER",
+      "provider_name_env": "AI_GATEWAY_PROVIDER_NAME",
+      "default_profile": "balanced",
+      "default_privacy_class": "internal",
+      "shared_model_env": "AI_GATEWAY_MODEL",
+      "shared_fallback_env": "AI_GATEWAY_FALLBACK_MODEL",
+      "profiles": {
+        "fast": {"model_env": "AI_GATEWAY_MODEL_FAST", "fallback_env": "AI_GATEWAY_FALLBACK_MODEL_FAST", "default_max_output_tokens": 512, "routing_profile": "fast"},
+        "balanced": {"model_env": "AI_GATEWAY_MODEL_BALANCED", "fallback_env": "AI_GATEWAY_FALLBACK_MODEL_BALANCED", "default_max_output_tokens": 1024, "routing_profile": "balanced"},
+        "quality": {"model_env": "AI_GATEWAY_MODEL_QUALITY", "fallback_env": "AI_GATEWAY_FALLBACK_MODEL_QUALITY", "default_max_output_tokens": 2048, "routing_profile": "quality"}
+      },
+      "fallback_retryable": ["http_429", "http_5xx", "timeout", "network_error"],
+      "fallback_attempts_max": 1,
+      "request_reasoning_efforts": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+      "response_formats": ["text", "json_object"],
+      "message_roles": ["system", "user", "assistant"],
+      "messages_min": 1,
+      "messages_max": 40,
+      "safe_identifier_pattern": "^[A-Za-z0-9_.:/-]{1,64}$",
+      "response_language_policy": "solo-empire.ai-response-language.th-v1",
+      "output_trust": "untrusted_model_output",
+      "provider_presets": {
+        "source": "systems/ai-data/central-ai-gateway.md#provider-presets",
+        "code_change_required": false,
+        "presets": ["OpenAI", "Anthropic (Claude)", "Google (Gemini)", "xAI (Grok)", "OpenRouter", "RunPod / vLLM"]
+      }
+    }
+  },
+  "budget": {
+    "source": "api/ai_gateway.ts:182-211,322-332,448-460,620-758; api/ai_budget.ts:77-334; api/ai-gateway-service/service.ts:172-186,197,265-301",
+    "request_limits": {
+      "AI_GATEWAY_DEFAULT_TOKEN_BUDGET": {"default": 4096, "min": 256, "max": 32768},
+      "AI_GATEWAY_MAX_TOKEN_BUDGET": {"default": "AI_GATEWAY_DEFAULT_TOKEN_BUDGET", "min": 256, "max": 131072},
+      "AI_GATEWAY_MAX_OUTPUT_TOKENS": {"default": 4096, "min": 128, "max": 16384},
+      "AI_GATEWAY_MAX_CONTEXT_CHARS": {"default": 48000, "min": 1024, "max": 200000},
+      "AI_GATEWAY_TIMEOUT_MS": {"default": 30000, "min": 1000, "max": 120000},
+      "AI_GATEWAY_REASONING_TIMEOUT_MS": {"default": "AI_GATEWAY_TIMEOUT_MS", "min": 1000, "max": 120000}
+    },
+    "request_token_budget_min": 256,
+    "rate_cards_required": ["AI_GATEWAY_INPUT_USD_PER_1K", "AI_GATEWAY_OUTPUT_USD_PER_1K"],
+    "error_cost_policies": {
+      "unknown": "default; provider error cost recorded as NULL, which makes the monthly guard deny (unmetered_api_events) until reconciled",
+      "bounded": "HTTP rejection recorded as 0; timeout/unreadable response recorded as the reserved worst-case estimate"
+    },
+    "monthly_guard": {
+      "contract": "solo-empire.llm-lab-budget.v1",
+      "budget_env": ["LLM_LAB_MONTHLY_BUDGET_USD", "AI_GATEWAY_MONTHLY_BUDGET_USD"],
+      "commitment_env": ["AI_SUBSCRIPTION_MONTHLY_USD", "AI_STORAGE_MONTHLY_USD"],
+      "unmetered_override_env": "LLM_LAB_ALLOW_UNMETERED_API",
+      "hard_stop_ratio_env": "LLM_LAB_HARD_STOP_RATIO",
+      "reasons": {
+        "allow": ["within_budget"],
+        "unconfigured": ["monthly_budget_not_configured"],
+        "unavailable": ["cost_signal_unavailable", "gpu_cost_signal_unavailable"],
+        "deny_configuration": ["invalid_budget", "invalid_subscription_cost", "invalid_storage_cost", "invalid_hard_stop_ratio", "invalid_configuration"],
+        "deny_spend": ["gpu_session_overdue", "subscription_exceeds_monthly_budget", "storage_exceeds_monthly_budget", "fixed_commitments_exceed_monthly_budget", "unmetered_api_events", "monthly_budget_exceeded"],
+        "deny_reservation": ["invalid_cost_estimate", "unmetered_request", "request_would_exceed_monthly_budget"]
+      }
+    },
+    "fail_closed": {
+      "pre_provider_denial": {"http_status": 429, "service_code": "monthly_budget_exceeded", "telemetry_status": "budget_exceeded", "estimated_cost_usd": 0, "provider_calls": 0},
+      "hosted_budget_unconfigured": {"http_status": 503, "service_code": "budget_not_configured", "env": "AI_GATEWAY_REQUIRE_BUDGET", "default": true},
+      "guard_unavailable": {"http_status": 503, "service_code": "budget_unavailable"},
+      "provider_not_configured": {"http_status": 503, "error_class": "not_configured"},
+      "post_hoc_over_token_budget": {"http_status": 200, "status": "budget_exceeded", "content_returned": true},
+      "local_guard_opt_in": "createAiBudgetGuard returns undefined when no monthly budget is set; only the hosted service enforces a budget by default"
+    }
+  },
+  "redaction": {
+    "rules": [
+      {"id": "RD-1", "layer": "telemetry", "rule": "ai_run_telemetry rows hold scalar run metadata only; no prompt, message, response or credential", "source": "api/ai_gateway.ts:48-63,499-516,705-729; database/migrations/025_ai_run_telemetry.sql:1-17", "enforced_by": "gateway", "parity_cases": ["GW-REDACT-SUCCESS", "GW-REDACT-PROVIDER-ERROR"]},
+      {"id": "RD-2", "layer": "provider-error", "rule": "provider error bodies are drained, never returned, logged or stored; only a fixed error_class crosses the boundary", "source": "api/ai_gateway.ts:576-590", "enforced_by": "gateway", "parity_cases": ["GW-REDACT-PROVIDER-ERROR", "GW-RATE-LIMITED"]},
+      {"id": "RD-3", "layer": "configuration", "rule": "provider URL with userinfo, query or fragment is refused; status exposes booleans for URL/key, never the values", "source": "api/ai_gateway.ts:257-272,346-403", "enforced_by": "gateway", "parity_cases": ["GW-STATUS-NO-KEY", "GW-URL-CREDENTIALS"]},
+      {"id": "RD-4", "layer": "privacy", "rule": "hosted generation fails closed for private and restricted data before any provider call", "source": "api/ai_gateway.ts:423-427; infra/scripts/agent/model_routing.py:132-137", "enforced_by": "gateway+agent-routing", "parity_cases": ["GW-PRIVACY-PRIVATE", "GW-PRIVACY-RESTRICTED", "RT-08", "RT-13"]},
+      {"id": "RD-5", "layer": "service-log", "rule": "one content-free JSON log line per request with a fixed key set", "source": "api/ai-gateway-service/service.ts:200-222", "enforced_by": "gateway", "parity_cases": [], "static_check": "service_log_keys"},
+      {"id": "RD-6", "layer": "agent-context", "rule": "credential-shaped key=value, bearer tokens and PEM blocks are redacted from agent context packs", "source": "infra/scripts/agent/context_pack.py:33-37,70-93", "enforced_by": "agent-routing", "parity_cases": ["RX-01", "RX-02", "RX-03", "RX-04", "RX-06", "RX-07"]},
+      {"id": "RD-7", "layer": "routing-plan", "rule": "routing plans fingerprint the task (sha256) instead of returning it; raw prompt persistence is forbidden", "source": "infra/scripts/agent/model_routing.py:96-99,236,257-261", "enforced_by": "agent-routing", "parity_cases": ["RT-01"]},
+      {"id": "RD-8", "layer": "prompt-content", "rule": "secrets/PII inside caller messages are NOT scrubbed before the hosted provider; the gateway relies on the caller-declared privacy_class", "source": "api/ai_gateway.ts:432-444,552", "enforced_by": "none", "parity_cases": ["GW-REDACT-SUCCESS", "RX-05"]}
+    ],
+    "telemetry_event_fields": ["run_id", "route", "prompt_version", "provider", "model", "input_tokens", "output_tokens", "total_tokens", "token_budget", "latency_ms", "estimated_cost_usd", "cache_hit", "status", "metadata"],
+    "telemetry_columns": ["id", "run_id", "route", "prompt_version", "provider", "model", "input_tokens", "output_tokens", "total_tokens", "token_budget", "latency_ms", "estimated_cost_usd", "cache_hit", "status", "metadata_json", "created_at"],
+    "telemetry_metadata_keys": ["contract", "error_class", "profile", "error_cost_policy", "attempt", "parent_run_id", "privacy_class", "usage_source", "response_language", "response_language_policy", "response_format", "fallback_used", "primary_model", "primary_error_class"],
+    "service_metadata_keys": ["subject", "service"],
+    "service_log_keys": ["ts", "event", "run_id", "route", "prompt_version", "profile", "provider", "model", "telemetry_status", "error_class", "fallback_used", "primary_error_class", "input_tokens", "output_tokens", "total_tokens", "estimated_cost_usd", "latency_ms"],
+    "service_log_extra_keys": ["subject", "http_status", "code", "request_ms"],
+    "error_classes": ["invalid_json", "invalid_response", "network_error", "not_configured", "provider_auth", "provider_error", "provider_rejected", "rate_limited", "timeout"],
+    "secret_patterns": {
+      "source": "infra/scripts/agent/context_pack.py:33-37",
+      "secret_value": "(?i)((?:[a-z0-9]+[_-])*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|secret[_-]?key)\\b\\s*[:=]\\s*)([^\\s#;,]+)",
+      "bearer": "(?i)(\\bbearer\\s+)([A-Za-z0-9._~+/=-]+)",
+      "pem": "-----BEGIN [A-Z0-9 ]+-----|-----END [A-Z0-9 ]+-----",
+      "value_replacement": "[REDACTED]",
+      "pem_line_replacement": "[REDACTED_KEY_MATERIAL]\n"
+    }
+  },
+  "evaluation": {
+    "plan_id": "ai-api-control-plane-eval-v1",
+    "plan_source": "systems/ai-data/ai-api-evaluation-plan.md:25-38",
+    "release_recommendation": "restrict",
+    "scenarios": [
+      {"name": "Normal use", "threshold": "100% of assertions pass", "current_result": "PASS — 2026-09-13 local", "parity_cases": ["GW-REDACT-SUCCESS", "GW-PROFILE-ROUTING"]},
+      {"name": "Missing authentication", "threshold": "401; provider calls 0", "current_result": "PASS — 2026-09-13 local", "parity_cases": [], "gap": "G-8"},
+      {"name": "Privacy boundary", "threshold": "403; provider calls 0", "current_result": "PASS — 2026-09-13 local", "parity_cases": ["GW-PRIVACY-PRIVATE", "GW-PRIVACY-RESTRICTED"]},
+      {"name": "Malformed/bounded request", "threshold": "400; provider calls 0", "current_result": "PASS — 2026-09-13 local", "parity_cases": ["GW-TOKEN-BUDGET-CEILING"]},
+      {"name": "Prompt-injection text", "threshold": "No new tool permission; output remains untrusted", "current_result": "PASS — 2026-09-13 local", "parity_cases": ["GW-REDACT-SUCCESS"]},
+      {"name": "Provider timeout/rate limit", "threshold": "504/429; no provider body in response or log", "current_result": "PASS — 2026-09-13 local", "parity_cases": ["GW-RATE-LIMITED", "GW-REDACT-PROVIDER-ERROR"]},
+      {"name": "Unknown rate card or monthly cap", "threshold": "Request denied; provider calls 0", "current_result": "PASS — 2026-09-13 local", "parity_cases": ["GW-BUDGET-CAP", "GW-BUDGET-UNKNOWN-COST", "GW-BUDGET-INVALID-CONFIG"]},
+      {"name": "Rate/concurrency limit", "threshold": "429 with Retry-After; provider calls stay within limit", "current_result": "PASS — 2026-09-13 local", "parity_cases": [], "gap": "G-8"},
+      {"name": "Telemetry privacy", "threshold": "No prompt, response, auth token, or private payload", "current_result": "PASS — 2026-09-13 local", "parity_cases": ["GW-REDACT-SUCCESS", "GW-REDACT-PROVIDER-ERROR"]},
+      {"name": "Rollback", "threshold": "/api/ai/status unconfigured; generation 503", "current_result": "PASS — 2026-09-13 local", "parity_cases": ["GW-NOT-CONFIGURED"]}
+    ],
+    "synthetic_canaries": {
+      "secret": "sk-SYNTHETIC-BOO145-0000000000000000",
+      "email": "synthetic.person@example.invalid",
+      "phone": "+66 80 000 0000",
+      "provider_error_body": "SYNTHETIC-PROVIDER-ERROR-BODY-BOO145"
+    },
+    "routing_cases": [
+      {"id": "RT-01", "input": {"task": "pair on a refactor", "route": "ai-pipeline", "operation": "change", "workload": "interactive", "available_adapters": ["local", "subscription"]}, "expect": {"requested": "subscription", "selected": "subscription", "service_lane": "subscription", "selection_reason": "requested_profile_available", "candidates": [["subscription", "available"], ["local_reference", "available"]], "credentials_required": false, "max_output_tokens": 4096, "token_budget": 6000}},
+      {"id": "RT-02", "input": {"task": "pair on a refactor", "route": "ai-pipeline", "operation": "change", "workload": "interactive", "available_adapters": ["local"]}, "expect": {"requested": "subscription", "selected": "local_reference", "service_lane": "local", "selection_reason": "requested_service_lane_unavailable_fallback_to_local", "candidates": [["subscription", "unavailable"], ["local_reference", "available"]], "credentials_required": false, "max_output_tokens": 1200, "token_budget": 6000}},
+      {"id": "RT-03", "input": {"task": "quick health check", "route": "health", "operation": "inspect", "available_adapters": ["local", "external"]}, "expect": {"requested": "fast", "selected": "fast", "service_lane": "api", "selection_reason": "requested_profile_available", "candidates": [["fast", "available"], ["balanced", "available"], ["local_reference", "available"]], "credentials_required": true, "max_output_tokens": 1000, "token_budget": 3500}},
+      {"id": "RT-04", "input": {"task": "deep reasoning review of a plan", "route": "ai-pipeline", "operation": "plan", "available_adapters": ["local", "external"]}, "expect": {"requested": "quality", "selected": "quality", "service_lane": "api", "selection_reason": "requested_profile_available", "candidates": [["quality", "available"], ["balanced", "available"], ["fast", "available"], ["local_reference", "available"]], "credentials_required": true, "max_output_tokens": 6000, "token_budget": 6000}},
+      {"id": "RT-05", "input": {"task": "summarise notes", "route": "ai-pipeline", "operation": "operate", "token_budget": 7000, "available_adapters": ["local", "external"]}, "expect": {"requested": "quality", "selected": "quality", "service_lane": "api", "selection_reason": "requested_profile_available", "candidates": [["quality", "available"], ["balanced", "available"], ["fast", "available"], ["local_reference", "available"]], "credentials_required": true, "max_output_tokens": 6000, "token_budget": 7000}},
+      {"id": "RT-06", "input": {"task": "summarise notes", "route": "ai-pipeline", "operation": "operate", "latency_target_ms": 800, "available_adapters": ["local", "external"]}, "expect": {"requested": "fast", "selected": "fast", "service_lane": "api", "selection_reason": "requested_profile_available", "candidates": [["fast", "available"], ["balanced", "available"], ["local_reference", "available"]], "credentials_required": true, "max_output_tokens": 1000, "token_budget": 6000}},
+      {"id": "RT-07", "input": {"task": "summarise notes", "route": "ai-pipeline", "operation": "operate"}, "expect": {"requested": "balanced", "selected": "local_reference", "service_lane": "local", "selection_reason": "local_reference_is_only_configured_adapter", "candidates": [["balanced", "unavailable"], ["fast", "unavailable"], ["local_reference", "available"]], "credentials_required": false, "max_output_tokens": 1200, "token_budget": 6000}},
+      {"id": "RT-08", "input": {"task": "summarise notes", "route": "ai-pipeline", "operation": "operate", "privacy_class": "private", "available_adapters": ["local", "external", "subscription"]}, "expect": {"requested": "balanced", "selected": "local_reference", "service_lane": "local", "selection_reason": "local_reference_is_only_configured_adapter", "candidates": [["balanced", "excluded"], ["fast", "excluded"], ["local_reference", "available"]], "credentials_required": false, "max_output_tokens": 1200, "token_budget": 6000}},
+      {"id": "RT-09", "input": {"task": "embed synthetic docs", "route": "ai-pipeline", "operation": "operate", "workload": "embedding", "available_adapters": ["local", "runpod"]}, "expect": {"requested": "gpu_worker", "selected": "gpu_worker", "service_lane": "runpod", "selection_reason": "requested_profile_available", "candidates": [["gpu_worker", "available"], ["local_reference", "available"]], "credentials_required": true, "max_output_tokens": 4096, "token_budget": 6000}},
+      {"id": "RT-10", "input": {"task": "batch synthetic job", "route": "ai-pipeline", "operation": "operate", "workload": "batch", "available_adapters": ["local"]}, "expect": {"requested": "gpu_worker", "selected": "local_reference", "service_lane": "local", "selection_reason": "requested_service_lane_unavailable_fallback_to_local", "candidates": [["gpu_worker", "unavailable"], ["local_reference", "available"]], "credentials_required": false, "max_output_tokens": 1200, "token_budget": 6000}},
+      {"id": "RT-11", "input": {"task": "deep accuracy check", "route": "ai-pipeline", "operation": "operate", "quality": "fast", "available_adapters": ["local", "external"]}, "expect": {"requested": "fast", "selected": "fast", "service_lane": "api", "selection_reason": "requested_profile_available", "candidates": [["fast", "available"], ["balanced", "available"], ["local_reference", "available"]], "credentials_required": true, "max_output_tokens": 1000, "token_budget": 6000}},
+      {"id": "RT-12", "input": {"task": "ช่วยวิเคราะห์ลึก แผนงาน", "route": "ai-pipeline", "operation": "plan", "available_adapters": ["local", "external"]}, "expect": {"requested": "quality", "selected": "quality", "service_lane": "api", "selection_reason": "requested_profile_available", "candidates": [["quality", "available"], ["balanced", "available"], ["fast", "available"], ["local_reference", "available"]], "credentials_required": true, "max_output_tokens": 6000, "token_budget": 6000}},
+      {"id": "RT-13", "input": {"task": "pair on a refactor", "route": "ai-pipeline", "operation": "change", "workload": "interactive", "privacy_class": "restricted", "available_adapters": ["local", "subscription"]}, "expect": {"requested": "subscription", "selected": "local_reference", "service_lane": "local", "selection_reason": "requested_service_lane_unavailable_fallback_to_local", "candidates": [["subscription", "excluded"], ["local_reference", "available"]], "credentials_required": false, "max_output_tokens": 1200, "token_budget": 6000}},
+      {"id": "RT-14", "input": {"task": "summarise notes", "route": "ai-pipeline", "operation": "operate", "available_adapters": ["external"]}, "expect": {"requested": "balanced", "selected": "balanced", "service_lane": "api", "selection_reason": "requested_profile_available", "candidates": [["balanced", "available"], ["fast", "available"], ["local_reference", "unavailable"]], "credentials_required": true, "max_output_tokens": 3000, "token_budget": 6000}}
+    ],
+    "redaction_cases": [
+      {"id": "RX-01", "input": "OPENAI_API_KEY=sk-SYNTHETIC-BOO145-0000000000000000", "expect_output": "OPENAI_API_KEY=[REDACTED]", "expect_count": 1},
+      {"id": "RX-02", "input": "Authorization: Bearer synthetic.token.value", "expect_output": "Authorization: Bearer [REDACTED]", "expect_count": 1},
+      {"id": "RX-03", "input": "client_secret: synthetic123, password=synthetic456", "expect_output": "client_secret: [REDACTED], password=[REDACTED]", "expect_count": 2},
+      {"id": "RX-04", "input": "-----BEGIN PRIVATE KEY-----", "expect_output": "[REDACTED_KEY_MATERIAL]\n", "expect_count": 1},
+      {"id": "RX-05", "input": "contact synthetic.person@example.invalid +66 80 000 0000", "expect_output": "contact synthetic.person@example.invalid +66 80 000 0000", "expect_count": 0, "gap": "G-4"},
+      {"id": "RX-06", "input": "db_password = synthetic789 # note", "expect_output": "db_password = [REDACTED] # note", "expect_count": 1},
+      {"id": "RX-07", "input": "x-api-key: synthetic000", "expect_output": "x-api-key: [REDACTED]", "expect_count": 1},
+      {"id": "RX-08", "input": "token: synthetic000", "expect_output": "token: synthetic000", "expect_count": 0, "gap": "G-4"}
+    ],
+    "gateway_cases": [
+      {"id": "GW-REDACT-SUCCESS", "kind": "generate", "provider": "ok", "privacy_class": "internal", "profile": "balanced", "messages_include_canaries": true, "expect": {"outcome": "success", "status": "success", "output_trust": "untrusted_model_output", "provider_calls": 1, "provider_model": "slot-balanced", "telemetry_contains_canary": false, "telemetry_fields_subset": true, "metadata_keys_subset": true, "provider_received_canary": true, "provider_received_language_policy": true}},
+      {"id": "GW-PROFILE-ROUTING", "kind": "profiles", "expect": {"fast": "slot-fast", "balanced": "slot-balanced", "quality": "slot-quality"}},
+      {"id": "GW-PRIVACY-PRIVATE", "kind": "generate", "provider": "ok", "privacy_class": "private", "expect": {"outcome": "error", "http_status": 403, "provider_calls": 0}},
+      {"id": "GW-PRIVACY-RESTRICTED", "kind": "generate", "provider": "ok", "privacy_class": "restricted", "expect": {"outcome": "error", "http_status": 403, "provider_calls": 0}},
+      {"id": "GW-TOKEN-BUDGET-CEILING", "kind": "generate", "provider": "ok", "privacy_class": "internal", "token_budget": 6000, "expect": {"outcome": "error", "http_status": 400, "provider_calls": 0}},
+      {"id": "GW-REDACT-PROVIDER-ERROR", "kind": "generate", "provider": "http_500_with_body", "privacy_class": "internal", "messages_include_canaries": true, "expect": {"outcome": "error", "http_status": 502, "error_class": "provider_rejected", "provider_calls": 1, "error_contains_canary": false, "telemetry_contains_canary": false}},
+      {"id": "GW-RATE-LIMITED", "kind": "generate", "provider": "http_429_with_body", "privacy_class": "internal", "expect": {"outcome": "error", "http_status": 429, "error_class": "rate_limited", "provider_calls": 1, "error_contains_canary": false, "telemetry_contains_canary": false}},
+      {"id": "GW-FALLBACK", "kind": "generate", "provider": "http_503_then_ok", "privacy_class": "internal", "fallback": true, "expect": {"outcome": "success", "status": "success", "fallback_used": true, "provider_calls": 2, "telemetry_rows": 2, "primary_attempt_metadata": "primary"}},
+      {"id": "GW-BUDGET-CAP", "kind": "generate", "provider": "ok", "privacy_class": "internal", "budget": {"monthly_usd": "1", "spent": 0.99999, "unknown": 0}, "expect": {"outcome": "error", "http_status": 429, "provider_calls": 0, "telemetry_status": "budget_exceeded", "telemetry_cost": 0, "error_class": "request_would_exceed_monthly_budget"}},
+      {"id": "GW-BUDGET-UNKNOWN-COST", "kind": "generate", "provider": "ok", "privacy_class": "internal", "budget": {"monthly_usd": "10", "spent": 0, "unknown": 1}, "expect": {"outcome": "error", "http_status": 429, "provider_calls": 0, "telemetry_status": "budget_exceeded", "telemetry_cost": 0, "error_class": "unmetered_api_events"}},
+      {"id": "GW-BUDGET-INVALID-CONFIG", "kind": "budget_guard", "budget": {"monthly_usd": "not-a-number"}, "expect": {"throws": true, "reason": "invalid_budget"}},
+      {"id": "GW-BUDGET-POST-HOC", "kind": "generate", "provider": "ok_over_budget_usage", "privacy_class": "internal", "expect": {"outcome": "success", "status": "budget_exceeded", "provider_calls": 1}},
+      {"id": "GW-NOT-CONFIGURED", "kind": "generate", "provider": "none", "privacy_class": "internal", "expect": {"outcome": "error", "http_status": 503, "provider_calls": 0, "error_class": "not_configured"}},
+      {"id": "GW-STATUS-NO-KEY", "kind": "status", "expect": {"configured": true, "contains_api_key": false, "api_key_configured": true}},
+      {"id": "GW-URL-CREDENTIALS", "kind": "status", "base_url": "https://user:synthetic@provider.invalid/v1/", "expect": {"configured": false, "contains_api_key": false, "reason_contains": "forbidden credentials"}}
+    ]
+  },
+  "gaps": [
+    {"id": "G-1", "area": "routing", "summary": "Per-profile output caps disagree: agent routing plans 1000/3000/6000 tokens, the gateway defaults to 512/1024/2048 and caps at AI_GATEWAY_MAX_OUTPUT_TOKENS (4096)."},
+    {"id": "G-2", "area": "budget", "summary": "Agent routing defaults token_budget to 6000 for non-inspect operations and escalates to quality above 6000, but the gateway rejects token_budget above AI_GATEWAY_MAX_TOKEN_BUDGET (default 4096) with HTTP 400."},
+    {"id": "G-3", "area": "routing", "summary": "The subscription slot names a vendor model (gpt-5.6-luna-subscription) instead of a provider-neutral alias; gateway model IDs are only env-configured slots."},
+    {"id": "G-4", "area": "redaction", "summary": "No content redaction before the hosted provider: emails, phone numbers and bare 'token:' values pass through; context_pack redaction covers only credential-shaped key=value, bearer and PEM."},
+    {"id": "G-5", "area": "budget", "summary": "Budget guard and rate limiter are process-local (single replica); the in-process gateway (outside the hosted service) only enforces the monthly budget when LLM_LAB_MONTHLY_BUDGET_USD is set."},
+    {"id": "G-6", "area": "evaluation", "summary": "Provider quality, p50/p95 latency and rate-card reconciliation are not evaluated; evaluation plan release recommendation is 'restrict' with human approvals pending."},
+    {"id": "G-7", "area": "routing", "summary": "Specialised GPU volume routing depends on gpu_worker_policy in platform-ops-cli and is not captured here (cases use volume_units=None)."},
+    {"id": "G-8", "area": "evaluation", "summary": "Missing-auth and rate/concurrency scenarios are not re-exercised by this fixture's harness (covered only by the gateway's own tests)."}
+  ]
+}

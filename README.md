@@ -63,3 +63,10 @@ Before activating a remote or changing a consumer, add sanitized fixtures for
 success, duplicate delivery, timeout and provider failure; prove tenant/privacy
 isolation; compare the old and new contract; and rehearse rollback on a
 disposable state store. Record the evidence in the parent platform registry.
+
+Gate evidence:
+
+- BOO-145, provider-neutral routing, budget, redaction and evaluation parity:
+  [`docs/gates/BOO-145-provider-neutral-parity.md`](docs/gates/BOO-145-provider-neutral-parity.md)
+  (fixture `fixtures/gates/provider-neutral-parity.json`, check `scripts/ai_parity.py`).
+  The owner decision there is proposed, not accepted.

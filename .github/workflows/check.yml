@@ -35,3 +35,51 @@ jobs:
 
       - name: Run offline contract check and tests
         run: bash scripts/check.sh
+
+  gateway-parity:
+    # BOO-145: run the parity cases against the REAL current gateway
+    # (bookchaowalit/platform-ai-gateway-api is public, AGPL-3.0). The code is
+    # only checked out and executed here; nothing is copied into this repo.
+    # solo-empire is private, so agent routing/redaction parity is local-only.
+    name: Gateway parity (platform-ai-gateway-api @ pinned commit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GATEWAY_COMMIT: 723d752d47509939aa6124728be84e63f07167ef
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check out gateway at the fixture's pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: bookchaowalit/platform-ai-gateway-api
+          ref: ${{ env.GATEWAY_COMMIT }}
+          path: _gateway
+          persist-credentials: false
+
+      - name: Confirm the pin matches the fixture
+        run: |
+          python3 -c "import json,sys; pin=json.load(open('fixtures/gates/provider-neutral-parity.json'))['sources']['gateway']['commit']; sys.exit(0 if pin == '${GATEWAY_COMMIT}' else f'fixture pins {pin}, workflow pins ${GATEWAY_COMMIT}')"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install gateway dev dependencies (tsx)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: _gateway
+
+      - name: Contract check and tests with gateway parity required
+        env:
+          PLATFORM_AI_PARITY_GATEWAY: ${{ github.workspace }}/_gateway
+          REQUIRE_GATEWAY_PARITY: "1"
+        run: |
+          bash scripts/check.sh
+          python3 scripts/ai_parity.py --gateway-root "$PLATFORM_AI_PARITY_GATEWAY"
