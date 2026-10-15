@@ -20,7 +20,7 @@
     "observability"
   ],
   "current_implementation": {
-    "repository": "ai-gateway",
+    "repository": "platform-ai-gateway-api",
     "source_path": "bookchaowalit/platform-ai-gateway-api",
     "source_paths": [
       "bookchaowalit/platform-ai-gateway-api"
