@@ -11,6 +11,10 @@ skipped unless the local, read-only checkouts are named:
   checkout with ``npm ci`` run (provides ``tsx``; override with
   ``PLATFORM_AI_PARITY_TSX``);
 * ``PLATFORM_AI_PARITY_SOLO_EMPIRE``: a ``bookchaowalit/solo-empire`` checkout.
+
+The gateway (public) is enforced in CI by the ``gateway-parity`` job with
+``REQUIRE_GATEWAY_PARITY=1``. solo-empire is private, so routing/redaction
+parity against its real code is local-only and NOT enforced in CI.
 """
 
 from __future__ import annotations
@@ -37,6 +41,9 @@ def _load(name: str, relative: str):
 parity = _load("platform_ai_parity", "scripts/ai_parity.py")
 FIXTURE = parity.load_fixture()
 GATEWAY_ROOT = os.environ.get("PLATFORM_AI_PARITY_GATEWAY")
+# CI sets REQUIRE_GATEWAY_PARITY=1: a missing gateway checkout or tsx then fails
+# instead of skipping, and a changed pinned source file is an error, not a warning.
+REQUIRE_GATEWAY_PARITY = os.environ.get("REQUIRE_GATEWAY_PARITY") == "1"
 SOLO_ROOT = os.environ.get("PLATFORM_AI_PARITY_SOLO_EMPIRE")
 
 
@@ -137,35 +144,39 @@ class OracleTests(unittest.TestCase):
         self.assertTrue(any("RT-05" in error for error in parity.check_oracle(mutated)))
 
 
+# Made-up TypeScript (not taken from the gateway) shaped only to exercise the
+# extractor regexes; identifiers, numbers and messages are deliberately different.
 SAMPLE_GATEWAY = """
-const PROFILE_DEFAULT_OUTPUT: Record<AiProfile, number> = {
-  fast: 512,
-  balanced: 1_024,
-  quality: 2048,
+// synthetic extractor fixture
+export const PROFILE_DEFAULT_OUTPUT: Map<Tier, number> = {
+  fast: 300,
+  balanced: 2_000,
+  quality: 9000,
 };
-const PRIVACY_CLASSES = new Set<AiPrivacyClass>(['public', 'internal', 'private', 'restricted']);
-  const defaultTokenBudget = boundedInt(env.AI_GATEWAY_DEFAULT_TOKEN_BUDGET, 4_096, 256, 32_768);
-  const maxTokenBudget = Math.max(defaultTokenBudget, boundedInt(env.AI_GATEWAY_MAX_TOKEN_BUDGET, defaultTokenBudget, 256, 131_072));
-  if (privacyClass === 'private' || privacyClass === 'restricted') {
-    throw new AiGatewayError(403, 'Hosted AI generation is disabled for private or restricted data');
-  }
-      const errorClass = providerResponse.status === 429 ? 'rate_limited' : 'provider_rejected';
-      return { kind: 'failure', model, errorClass, httpRejected: true };
+export const PRIVACY_CLASSES = new Set<Level>(['open', 'team', 'private', 'restricted']);
+function demoLimits(env: Env) {
+  const floor = boundedInt(env.AI_GATEWAY_DEFAULT_TOKEN_BUDGET, 1_000, 100, 9_999);
+  return [floor, boundedInt(env.AI_GATEWAY_MAX_TOKEN_BUDGET, defaultTokenBudget, 100, 77_777)];
+}
+function demoGuard(privacyClass: string) {
+  if (privacyClass === 'private' || privacyClass === 'restricted') { throw new AiGatewayError(403, 'demo refusal'); }
+}
+const errorClass = code === 1 ? 'demo_alpha' : 'demo_beta';
 """
 
 
 class ExtractorTests(unittest.TestCase):
     def test_profile_default_output(self) -> None:
-        self.assertEqual(parity.extract_profile_default_output(SAMPLE_GATEWAY), {"fast": 512, "balanced": 1024, "quality": 2048})
+        self.assertEqual(parity.extract_profile_default_output(SAMPLE_GATEWAY), {"fast": 300, "balanced": 2000, "quality": 9000})
 
     def test_bounded_ints(self) -> None:
         limits = parity.extract_bounded_ints(SAMPLE_GATEWAY)
-        self.assertEqual(limits["AI_GATEWAY_DEFAULT_TOKEN_BUDGET"], {"default": 4096, "min": 256, "max": 32768})
-        self.assertEqual(limits["AI_GATEWAY_MAX_TOKEN_BUDGET"]["default"], "AI_GATEWAY_DEFAULT_TOKEN_BUDGET")
+        self.assertEqual(limits["AI_GATEWAY_DEFAULT_TOKEN_BUDGET"], {"default": 1000, "min": 100, "max": 9999})
+        self.assertEqual(limits["AI_GATEWAY_MAX_TOKEN_BUDGET"], {"default": "AI_GATEWAY_DEFAULT_TOKEN_BUDGET", "min": 100, "max": 77777})
 
     def test_hosted_block_and_error_classes(self) -> None:
         self.assertEqual(parity.extract_hosted_blocked(SAMPLE_GATEWAY), ["private", "restricted"])
-        self.assertEqual(parity.extract_error_classes(SAMPLE_GATEWAY), ["provider_rejected", "rate_limited"])
+        self.assertEqual(parity.extract_error_classes(SAMPLE_GATEWAY), ["demo_alpha", "demo_beta"])
 
     def test_dropping_hosted_block_is_detected(self) -> None:
         weakened = SAMPLE_GATEWAY.replace(" || privacyClass === 'restricted'", "")
@@ -210,17 +221,30 @@ class GateDocumentTests(unittest.TestCase):
         self.assertIn(parity.GATE_DOC_RELATIVE, (ROOT / "README.md").read_text(encoding="utf-8"))
 
 
-@unittest.skipUnless(GATEWAY_ROOT, "set PLATFORM_AI_PARITY_GATEWAY to a platform-ai-gateway-api checkout")
 class CurrentGatewayParityTests(unittest.TestCase):
+    """Runs against the real gateway; enforced in CI by the gateway-parity job."""
+
+    def setUp(self) -> None:
+        if not GATEWAY_ROOT or not Path(GATEWAY_ROOT, "api/ai_gateway.ts").is_file():
+            message = "set PLATFORM_AI_PARITY_GATEWAY to a platform-ai-gateway-api checkout"
+            if REQUIRE_GATEWAY_PARITY:
+                self.fail(f"REQUIRE_GATEWAY_PARITY=1 but the gateway checkout is missing: {message}")
+            self.skipTest(message)
+        self.root = Path(GATEWAY_ROOT)
+
     def test_static_facts_match_fixture(self) -> None:
-        errors, _warnings = parity.compare_gateway(FIXTURE, Path(GATEWAY_ROOT))
+        errors, warnings = parity.compare_gateway(FIXTURE, self.root)
         self.assertEqual(errors, [])
+        if REQUIRE_GATEWAY_PARITY:
+            self.assertEqual(warnings, [], "pinned gateway sources changed; re-review the fixture")
 
     def test_gateway_cases_against_real_code(self) -> None:
-        tsx = parity.find_tsx(Path(GATEWAY_ROOT))
+        tsx = parity.find_tsx(self.root)
         if tsx is None:
+            if REQUIRE_GATEWAY_PARITY:
+                self.fail("REQUIRE_GATEWAY_PARITY=1 but tsx is missing (run npm ci in the gateway checkout)")
             self.skipTest("tsx not installed in the gateway checkout (run npm ci there)")
-        observed = parity.run_gateway_cases(ROOT / parity.FIXTURE_RELATIVE, Path(GATEWAY_ROOT), tsx)
+        observed = parity.run_gateway_cases(ROOT / parity.FIXTURE_RELATIVE, self.root, tsx)
         self.assertEqual(parity.compare_gateway_cases(FIXTURE, observed), [])
 
 

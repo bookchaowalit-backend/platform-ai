@@ -1,6 +1,7 @@
 // BOO-145 parity harness: runs the fixture's gateway_cases against the CURRENT
 // gateway implementation (bookchaowalit/platform-ai-gateway-api) and prints the
-// observed outcomes as JSON on stdout. Local only; never part of CI.
+// observed outcomes as JSON on stdout. Runs locally and in the CI
+// `gateway-parity` job (public gateway checked out at the pinned commit).
 //
 // Usage (the gateway checkout must have `npm ci` run so tsx is available):
 //   <gateway>/node_modules/.bin/tsx scripts/ai_parity_gateway_harness.mjs <gateway-root> <fixture.json>
@@ -24,6 +25,7 @@ const gateway = await import(pathToFileURL(resolve(join(gatewayRoot, 'api/ai_gat
 const budget = await import(pathToFileURL(resolve(join(gatewayRoot, 'api/ai_budget.ts'))).href);
 
 const SYNTHETIC_API_KEY = 'sk-SYNTHETIC-BOO145-GATEWAY-KEY';
+const ADAPTER = fixture.routing.gateway.adapter;
 let mode = 'ok';
 let calls = [];
 
@@ -32,14 +34,14 @@ const okPayload = (usage) => ({
   usage,
 });
 
-const server = createServer((req, res) => {
+const mockProvider = createServer((req, res) => {
   const chunks = [];
   req.on('data', (chunk) => chunks.push(chunk));
   req.on('end', () => {
     const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
     calls.push(body);
     const send = (status, payload) => {
-      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
       res.end(typeof payload === 'string' ? payload : JSON.stringify(payload));
     };
     if (mode === 'http_500_with_body') return send(500, { error: canaries.provider_error_body, key: canaries.secret });
@@ -49,20 +51,20 @@ const server = createServer((req, res) => {
     return send(200, okPayload({ prompt_tokens: 50, completion_tokens: 20, total_tokens: 70 }));
   });
 });
-await new Promise((done) => server.listen(0, '127.0.0.1', done));
-const port = server.address().port;
+await new Promise((done) => mockProvider.listen(0, '127.0.0.1', done));
+const port = mockProvider.address().port;
 
 function baseEnv(extra = {}) {
   return {
     NODE_ENV: 'test',
-    AI_GATEWAY_PROVIDER: 'openai-compatible',
+    AI_GATEWAY_PROVIDER: ADAPTER,
     AI_GATEWAY_PROVIDER_NAME: 'mock-provider',
     AI_GATEWAY_BASE_URL: `http://127.0.0.1:${port}/v1/`,
     AI_GATEWAY_API_KEY: SYNTHETIC_API_KEY,
     AI_GATEWAY_MODEL_FAST: 'slot-fast',
     AI_GATEWAY_MODEL_BALANCED: 'slot-balanced',
     AI_GATEWAY_MODEL_QUALITY: 'slot-quality',
-    AI_GATEWAY_INPUT_USD_PER_1K: '0.001',
+    AI_GATEWAY_INPUT_USD_PER_1K: '0.0010',
     AI_GATEWAY_OUTPUT_USD_PER_1K: '0.002',
     LLM_LAB_LEDGER_PATH: '/nonexistent/boo-145/ledger.jsonl',
     ...extra,
@@ -188,6 +190,6 @@ try {
     else results[item.id] = { unsupported_kind: item.kind };
   }
 } finally {
-  server.close();
+  mockProvider.close();
 }
 process.stdout.write(`${JSON.stringify(results)}\n`);

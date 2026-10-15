@@ -32,8 +32,18 @@ or redaction code). The executable current side is:
 | Agent routing / context redaction | `bookchaowalit/solo-empire` @ `63efeeb` | `infra/scripts/agent/model_routing.py`, `infra/scripts/agent/context_pack.py` |
 | Evaluation plan | `bookchaowalit/architecture-docs` @ `9471af5` | `systems/ai-data/ai-api-evaluation-plan.md` |
 
-The fixture pins the sha256 of every file above; `scripts/ai_parity.py` warns when one changes. The gateway is AGPL-3.0 and
-this repository is Apache-2.0, so no gateway code is copied here: the check reads a local checkout instead.
+The fixture pins the sha256 of every file above; `scripts/ai_parity.py` warns when one changes (the CI gateway job turns
+that into an error). The gateway is AGPL-3.0 and this repository is Apache-2.0, so no gateway code is copied here: the
+extractor unit tests use made-up TypeScript, and the parity check reads a checkout of the gateway (local, or checked out
+by CI) instead.
+
+## Where parity is enforced
+
+| Parity | Enforced in CI? | How |
+|---|---|---|
+| Fixture integrity, oracle, extractors, gate doc | yes (`contract` job) | `bash scripts/check.sh` |
+| Gateway (routing slots, budget, redaction, 15 gateway cases) against real code | **yes** (`gateway-parity` job) | checks out public `bookchaowalit/platform-ai-gateway-api` at `723d752`, `npm ci --ignore-scripts`, runs `scripts/check.sh` and `ai_parity.py --gateway-root` with `REQUIRE_GATEWAY_PARITY=1` (missing checkout/tsx or changed pinned file fails, never skips) |
+| Agent routing (14 cases) and context redaction (8 cases) against real solo-empire code | **no, local only** | solo-empire is private; CI has no read credential, so these tests skip in CI and were run locally only (`PLATFORM_AI_PARITY_SOLO_EMPIRE`) |
 
 ## Routing inventory
 
@@ -154,15 +164,19 @@ Proposed for the `ai` system owner. It is not accepted until the owner records a
 
 - No owner decision, registry update, status change, runtime move, deployment or provider call.
 - G-1 to G-8 are recorded, not fixed.
-- The source parity tests run only locally (`PLATFORM_AI_PARITY_GATEWAY`, `PLATFORM_AI_PARITY_SOLO_EMPIRE`). CI runs the
-  offline fixture, oracle, extractor and document tests.
+- Agent routing/redaction parity against the real solo-empire code is **not enforced in CI** (private repository, no
+  credential); it was run locally only. A change in `model_routing.py` or `context_pack.py` would go unnoticed until
+  someone re-runs it locally. Gateway parity is enforced in CI at the pinned commit only; drift on gateway `main` is not
+  watched by a scheduled job.
 
 ## Re-run
 
 ```bash
-bash scripts/check.sh                                   # offline (CI)
-(cd <platform-ai-gateway-api> && npm ci)                # once, provides tsx
+bash scripts/check.sh                                   # offline (CI contract job)
+(cd <platform-ai-gateway-api> && npm ci --ignore-scripts)   # once, provides tsx
+REQUIRE_GATEWAY_PARITY=1 PLATFORM_AI_PARITY_GATEWAY=<platform-ai-gateway-api> \
+  bash scripts/check.sh                                 # same as the CI gateway-parity job
 PLATFORM_AI_PARITY_GATEWAY=<platform-ai-gateway-api> \
 PLATFORM_AI_PARITY_SOLO_EMPIRE=<solo-empire> \
-  python3 -m unittest tests.test_ai_parity -v           # local parity against current code
+  python3 -m unittest tests.test_ai_parity -v           # adds local-only solo-empire parity
 ```
