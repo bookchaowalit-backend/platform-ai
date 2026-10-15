@@ -122,7 +122,7 @@ ai parity: OK (fixture, oracle, gateway-source, gateway-cases, agent-routing; 0 
 
 The gateway's draft PR #1 (`codex/shared-infrastructure-20261015`, shared workspace AI admission) changes `ai_gateway.ts`
 and `service.ts`. The same check run against that branch reports pin warnings only, with no behavioural drift. This
-repository has no PR #1.
+repository has no `codex/shared-infrastructure-20261015` branch or PR.
 
 ## Gaps
 
