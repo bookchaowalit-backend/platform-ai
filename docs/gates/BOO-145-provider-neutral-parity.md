@@ -1,7 +1,7 @@
 # BOO-145: provider-neutral parity gate (`ai`)
 
 - Issue: BOO-145. System: `ai` (`repository-catalog/registries/system-repositories.yaml`, solo-empire `63efeeb`, lines 530-553)
-- Status: evidence recorded. The owner decision is **proposed, not accepted**. Nothing in this document approves a hosted cutover, a runtime move or a status change.
+- Status: evidence recorded; owner decision **accepted on 2026-10-16**: "accept parity evidence; no cutover". Nothing in this document approves a hosted cutover, a runtime move or a status change.
 - Fixture: [`fixtures/gates/provider-neutral-parity.json`](../../fixtures/gates/provider-neutral-parity.json)
 - Check: [`scripts/ai_parity.py`](../../scripts/ai_parity.py), tests in [`tests/test_ai_parity.py`](../../tests/test_ai_parity.py), gateway harness [`scripts/ai_parity_gateway_harness.mjs`](../../scripts/ai_parity_gateway_harness.mjs)
 
@@ -147,14 +147,22 @@ repository has no `codex/shared-infrastructure-20261015` branch or PR.
 | G-7 | routing | GPU volume routing (`gpu_worker_policy`, platform-ops-cli) is not captured; cases use `volume_units=None`. |
 | G-8 | evaluation | Missing-auth and rate/concurrency scenarios are not re-run by this harness. |
 
-## Owner decision — PROPOSED, NOT ACCEPTED
+## Owner decision — ACCEPTED (owner decision 2026-10-16)
 
-Proposed for the `ai` system owner. It is not accepted until the owner records acceptance in the parent registry.
+Owner's answer, verbatim: "ทั้งหมด ยกเว้น 140/256 (Recommended)" (accept the recommended option on every pending gate
+decision except BOO-140 and BOO-256), relayed via the parent session `local_a6dedf75`.
+
+Accepted option for BOO-145: **accept parity evidence; no cutover.**
+
+What this accepts (items 1-2 of the proposal):
 
 1. Accept `fixtures/gates/provider-neutral-parity.json` as the parity baseline: any `platform-ai` runtime must reproduce
    its routing aliases, budget fail-closed table, redaction rules RD-1 to RD-7 and evaluation cases before shadow traffic.
 2. Keep `platform-ai` at `status: scaffolded`, `shadow_parity: pending`, `cutover: pending`. The hosted gateway
-   (`platform-ai-gateway-api`) stays the only serving implementation.
+   (`platform-ai-gateway-api`) stays the only serving implementation. No cutover.
+
+Still open (proposed, not decided by the owner):
+
 3. Before any hosted cutover, resolve or explicitly accept G-1, G-2 and G-4. Proposed resolution: the gateway's per-profile
    caps become canonical (512/1024/2048, budget ceiling 4096), routing plans clamp to them, and the content policy
    (RD-8) is either "caller-declared privacy class only" (accepted risk) or a pre-provider scrubber with its own cases.
@@ -162,7 +170,8 @@ Proposed for the `ai` system owner. It is not accepted until the owner records a
 
 ## Not done
 
-- No owner decision, registry update, status change, runtime move, deployment or provider call.
+- No registry update, status change, runtime move, deployment or provider call (the owner decision is "no cutover").
+- Open follow-ups: items 3 and 4 above (G-1/G-2/G-4 resolution, registry `source_paths`).
 - G-1 to G-8 are recorded, not fixed.
 - Agent routing/redaction parity against the real solo-empire code is **not enforced in CI** (private repository, no
   credential); it was run locally only. A change in `model_routing.py` or `context_pack.py` would go unnoticed until

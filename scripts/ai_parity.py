@@ -36,7 +36,10 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_RELATIVE = "fixtures/gates/provider-neutral-parity.json"
 GATE_DOC_RELATIVE = "docs/gates/BOO-145-provider-neutral-parity.md"
 HARNESS_RELATIVE = "scripts/ai_parity_gateway_harness.mjs"
-DECISION_STATE = "owner-decision-proposed-not-accepted"
+DECISION_STATE = "owner-decision-accepted"
+DECISION_DATE = "2026-10-16"
+DECISION_OPTION = "accept parity evidence; no cutover"
+DECISION_HEADING = "Owner decision — ACCEPTED (owner decision 2026-10-16)"
 SNAKE_LITERAL_RE = re.compile(r"'([a-z]+(?:_[a-z]+)*)'")
 
 
@@ -74,7 +77,16 @@ def validate_fixture(fixture: dict[str, Any]) -> list[str]:
     if errors:
         return errors
     if fixture.get("decision_state") != DECISION_STATE:
-        errors.append(f"decision_state must stay {DECISION_STATE!r}; owner acceptance is recorded outside this fixture")
+        errors.append(f"decision_state must be {DECISION_STATE!r} (owner decision {DECISION_DATE})")
+    decision = fixture.get("owner_decision") or {}
+    if decision.get("status") != "accepted":
+        errors.append("owner_decision.status must be 'accepted'")
+    if decision.get("date") != DECISION_DATE:
+        errors.append(f"owner_decision.date must be {DECISION_DATE!r}")
+    if decision.get("accepted_option") != DECISION_OPTION:
+        errors.append(f"owner_decision.accepted_option must be {DECISION_OPTION!r}")
+    if decision.get("cutover_approved") is not False:
+        errors.append("owner_decision.cutover_approved must be false (the accepted option is 'no cutover')")
     if fixture.get("synthetic_only") is not True:
         errors.append("synthetic_only must be true")
     for name, source in fixture["sources"].items():

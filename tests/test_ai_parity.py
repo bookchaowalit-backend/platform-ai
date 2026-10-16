@@ -58,10 +58,29 @@ class FixtureIntegrityTests(unittest.TestCase):
             "Capture provider-neutral routing, budget, redaction, and evaluation parity before any hosted cutover.",
         )
 
-    def test_owner_decision_cannot_be_marked_accepted(self) -> None:
+    def test_owner_decision_is_accepted_on_2026_10_16(self) -> None:
+        decision = FIXTURE["owner_decision"]
+        self.assertEqual(FIXTURE["decision_state"], "owner-decision-accepted")
+        self.assertEqual(decision["status"], "accepted")
+        self.assertEqual(decision["date"], "2026-10-16")
+        self.assertEqual(decision["accepted_option"], "accept parity evidence; no cutover")
+        self.assertIs(decision["cutover_approved"], False)
+
+    def test_owner_decision_marker_or_date_removed_fails(self) -> None:
+        for path, label in ((("decision_state",), "decision_state"), (("owner_decision", "status"), "owner_decision.status"),
+                            (("owner_decision", "date"), "owner_decision.date"), (("owner_decision",), "owner_decision.status")):
+            mutated = copy.deepcopy(FIXTURE)
+            target = mutated
+            for key in path[:-1]:
+                target = target[key]
+            target.pop(path[-1])
+            with self.subTest(removed=".".join(path)):
+                self.assertTrue(any(label in error for error in parity.validate_fixture(mutated)))
+
+    def test_owner_decision_cannot_approve_cutover(self) -> None:
         mutated = copy.deepcopy(FIXTURE)
-        mutated["decision_state"] = "accepted"
-        self.assertTrue(any("decision_state" in error for error in parity.validate_fixture(mutated)))
+        mutated["owner_decision"]["cutover_approved"] = True
+        self.assertTrue(any("cutover_approved" in error for error in parity.validate_fixture(mutated)))
 
     def test_workload_without_lane_rule_fails(self) -> None:
         mutated = copy.deepcopy(FIXTURE)
@@ -206,9 +225,12 @@ class GateDocumentTests(unittest.TestCase):
     def setUp(self) -> None:
         self.doc = (ROOT / parity.GATE_DOC_RELATIVE).read_text(encoding="utf-8")
 
-    def test_doc_quotes_gate_and_keeps_decision_proposed(self) -> None:
+    def test_doc_quotes_gate_and_records_accepted_decision(self) -> None:
         self.assertIn(FIXTURE["next_gate"], self.doc)
-        self.assertIn("Owner decision — PROPOSED, NOT ACCEPTED", self.doc)
+        self.assertIn("## " + parity.DECISION_HEADING, self.doc)
+        self.assertNotIn("PROPOSED, NOT ACCEPTED", self.doc)
+        self.assertIn(FIXTURE["owner_decision"]["owner_answer_verbatim"], self.doc)
+        self.assertIn(FIXTURE["owner_decision"]["accepted_option"], self.doc)
         self.assertIn(FIXTURE["contract"]["path"], self.doc)
 
     def test_doc_lists_every_gap_and_rule(self) -> None:
