@@ -3,7 +3,16 @@
   "issue": "BOO-145",
   "system_id": "ai",
   "next_gate": "Capture provider-neutral routing, budget, redaction, and evaluation parity before any hosted cutover.",
-  "decision_state": "owner-decision-proposed-not-accepted",
+  "decision_state": "owner-decision-accepted",
+  "owner_decision": {
+    "status": "accepted",
+    "date": "2026-10-16",
+    "accepted_option": "accept parity evidence; no cutover",
+    "owner_answer_verbatim": "ทั้งหมด ยกเว้น 140/256 (Recommended)",
+    "relayed_via": "parent session local_a6dedf75",
+    "cutover_approved": false,
+    "open_items": ["resolve or accept G-1, G-2, G-4 before any hosted cutover", "update registry source_paths for ai"]
+  },
   "synthetic_only": true,
   "contract": {
     "repository": "bookchaowalit/architecture-docs",

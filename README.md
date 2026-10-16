@@ -69,4 +69,4 @@ Gate evidence:
 - BOO-145, provider-neutral routing, budget, redaction and evaluation parity:
   [`docs/gates/BOO-145-provider-neutral-parity.md`](docs/gates/BOO-145-provider-neutral-parity.md)
   (fixture `fixtures/gates/provider-neutral-parity.json`, check `scripts/ai_parity.py`).
-  The owner decision there is proposed, not accepted.
+  Owner decision accepted 2026-10-16: accept parity evidence; no cutover.
