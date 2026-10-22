@@ -29,8 +29,9 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_RELATIVE = "fixtures/gates/provider-neutral-parity.json"
@@ -206,9 +207,7 @@ def oracle_route(fixture: dict[str, Any], case_input: dict[str, Any]) -> dict[st
         requested = case_input["quality"]
     elif any(term in task.casefold() for term in routing["quality_terms"]) or token_budget > routing["quality_token_threshold"]:
         requested = "quality"
-    elif latency is not None and latency <= routing["fast_latency_threshold_ms"]:
-        requested = "fast"
-    elif operation in routing["fast_operations"] or route in routing["fast_routes"]:
+    elif latency is not None and latency <= routing["fast_latency_threshold_ms"] or operation in routing["fast_operations"] or route in routing["fast_routes"]:
         requested = "fast"
     else:
         requested = "balanced"
@@ -314,7 +313,7 @@ def extract_bounded_ints(text: str) -> dict[str, dict[str, Any]]:
     """Map each ``boundedInt(env.X, default, min, max)`` call to its literal bounds."""
 
     found: dict[str, dict[str, Any]] = {}
-    pattern = re.compile(r"boundedInt\(\s*env\.(\w+),\s*([^,]+?),\s*([\d_]+),\s*([\d_]+)\s*,?\s*\)", re.S)
+    pattern = re.compile(r"boundedInt\(\s*env\.(\w+),\s*([^,]+?),\s*([\d_]+),\s*([\d_]+)\s*,?\s*\)", re.DOTALL)
     for name, default, low, high in pattern.findall(text):
         default = default.strip()
         if re.fullmatch(r"[\d_]+", default):
@@ -345,7 +344,7 @@ def extract_error_classes(text: str) -> list[str]:
 def extract_interface_fields(text: str, name: str) -> list[str]:
     block = _block(text, rf"export interface {name}\s*\{{")
     block = block[: block.index("\n}")]
-    return re.findall(r"^\s{2}(\w+)\??:", block, re.M)
+    return re.findall(r"^\s{2}(\w+)\??:", block, re.MULTILINE)
 
 
 def extract_model_envs(text: str) -> list[str]:
@@ -368,13 +367,13 @@ def extract_budget_reasons(text: str) -> list[str]:
 def extract_sql_columns(text: str) -> list[str]:
     body = _block(text, r"CREATE TABLE IF NOT EXISTS ai_run_telemetry \(")
     body = body[: body.index(");")]
-    return re.findall(r"^\s{4}(\w+)\s", body, re.M)
+    return re.findall(r"^\s{4}(\w+)\s", body, re.MULTILINE)
 
 
 def extract_log_keys(text: str) -> list[str]:
     block = _block(text, r"event: 'ai_gateway\.run',")
     block = block[: block.index("...fields")]
-    return ["ts", "event"] + re.findall(r"^\s+(\w+):", block, re.M)
+    return ["ts", "event"] + re.findall(r"^\s+(\w+):", block, re.MULTILINE)
 
 
 def extract_log_extra_keys(text: str) -> list[str]:
